@@ -1,0 +1,95 @@
+version: "2"
+
+name: "Airmeet to DevRev Integration"
+description: "Sync Airmeet registrations and engagement data into DevRev as contacts, accounts, and engagement objects."
+
+service_account:
+  display_name: Airmeet Integration Bot
+
+keyrings:
+  organization:
+    - name: airmeet_api_key
+      display_name: Airmeet API Key
+      description: API key to authenticate with Airmeet
+      types:
+        - snap_in_secret
+
+inputs:
+  organization:
+    - name: opt_in_account_linking
+      description: Enable domain-based account linking and creation for registrants
+      field_type: bool
+      default_value: true
+      ui:
+        display_name: Enable Account Linking
+        is_hidden: false
+
+    - name: leaf_type
+      description: Custom object type (leaf_type) to be created for each engagement (e.g., form, webinar, event)
+      field_type: text
+      is_required: true
+      default_value: ""
+      ui:
+        display_name: Leaf Type
+        is_hidden: false
+
+event_sources:
+  organization:
+    - name: airmeet-registration-source
+      description: Airmeet webhook trigger for new attendee registration
+      display_name: Airmeet Registration Webhook
+      type: flow-custom-webhook
+      setup_instructions: |
+        ## How to Register a Webhook with Airmeet
+
+        Use the following details to register this webhook with Airmeet:
+
+        **API Endpoint**: `https://api-gateway.airmeet.com/platform-integration/v1/webhook-register`
+
+        **Method**: `POST`
+
+        **Headers**:
+        - `Content-Type: application/json`
+        - `Accept: application/json`
+        - `x-access-key: <your-access-key>`
+        - `x-secret-key: <your-secret-key>`
+
+        **Payload**:
+        ```json
+        {
+          "name": "DevRev Webhook for Attendee Registration",
+          "description": "Sync attendee data to DevRev",
+          "triggerMetaInfoId": "trigger.airmeet.attendee.added",
+          "url": "{{source.trigger_url}}",
+          "platformName": "DevRev"
+        }
+        ```
+
+        Once registered, Airmeet will send attendee registration data to this URL.
+
+      config:
+        policy: |
+          package rego
+          output = {"event": event, "event_key": event_key} {
+            event := input.request.body
+            event_key := "trigger.airmeet.attendee.added"
+          }
+
+functions:
+  - name: handle_airmeet_webhook
+    description: Sync contact, link account, and create engagement object on registration webhook
+
+  - name: validate_leaf_type
+    description: Validates that the provided leaf_type exists in DevRev
+
+automations:
+  - name: Airmeet Registration Handler
+    description: Triggered when a registrant completes signup
+    source: airmeet-registration-source
+    event_types:
+      - custom:trigger.airmeet.attendee.added
+    function: handle_airmeet_webhook
+
+hooks:
+  - type: validate
+    function: validate_leaf_type
