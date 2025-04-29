@@ -93,7 +93,7 @@ class ApiUtils {
 
     const enrichedPayload = {
       leaf_type: leafType,
-      unique_key: `${registrant.airmeetId}`,
+      unique_key: `${registrant.id}`,
       custom_fields: {
         tnt__event_name: registrant.airmeetName,
         tnt__registration_date: formatDate(registrant.registrationTime),

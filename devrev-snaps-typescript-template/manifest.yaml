@@ -33,6 +33,51 @@ inputs:
         display_name: Leaf Type
         is_hidden: false
 
+    - name: field_event_name
+      description: Field key in the custom schema to store the name of the Airmeet event
+      field_type: text
+      is_required: true
+      default_value: ""
+      ui:
+        display_name: Event Name
+        is_hidden: false
+
+    - name: field_registration_date
+      description: Field key in the custom schema to store the attendee registration date
+      field_type: text
+      is_required: true
+      default_value: ""
+      ui:
+        display_name: Registration Date
+        is_hidden: false
+
+    - name: field_account
+      description: Field key in the custom schema to associate the registrant's organization account
+      field_type: text
+      is_required: true
+      default_value: ""
+      ui:
+        display_name: Account Field
+        is_hidden: false
+
+    - name: field_contact
+      description: Field key in the custom schema to associate the individual contact
+      field_type: text
+      is_required: true
+      default_value: ""
+      ui:
+        display_name: Contact Field
+        is_hidden: false
+
+    - name: field_other_info
+      description: Field key to store raw Airmeet registrant metadata as a JSON string
+      field_type: text
+      is_required: true
+      default_value: ""
+      ui:
+        display_name: Other Info (JSON)
+        is_hidden: false
+
 event_sources:
   organization:
     - name: airmeet-registration-source
