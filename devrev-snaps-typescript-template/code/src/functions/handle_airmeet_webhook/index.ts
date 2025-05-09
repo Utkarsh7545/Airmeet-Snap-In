@@ -6,6 +6,8 @@ const ACCOUNTS_CREATE = '/internal/accounts.create';
 const ACCOUNTS_LIST = '/internal/accounts.list';
 const REV_USERS_CREATE = '/internal/rev-users.create';
 const REV_USERS_LIST = '/internal/rev-users.list';
+const CUSTOM_OBJECT_LIST = '/internal/custom-objects.list';
+const CREATE_LINK = '/internal/links.create';
 
 // API Utility class to manage Accounts, Contacts, and Custom Objects
 class ApiUtils {
@@ -22,7 +24,7 @@ class ApiUtils {
     try {
       console.log(`Finding account by domain: ${domain}`);
       const response = await postCall(this.endpoint + ACCOUNTS_LIST, this.token, { domains: [domain] });
-      console.log(response);
+      console.log("getAccountInfo-", response);
 
       if (!response.success) {
         console.error(`Error finding account: ${response.errMessage}`);
@@ -47,7 +49,7 @@ class ApiUtils {
     };
     try {
       const response = await postCall(this.endpoint + ACCOUNTS_CREATE, this.token, payload);
-      console.log(response);
+      console.log("createAccount-", response);
       return response.data?.account;
     } catch (e) {
       console.error('Error creating account:', e);
@@ -59,7 +61,7 @@ class ApiUtils {
   async getContactInfo(email: string): Promise<any[]> {
     try {
       const result = await postCall(this.endpoint + REV_USERS_LIST, this.token, { email: [email] });
-      console.log(result);
+      console.log("getContactInfo-", result);
       return result.data?.rev_users || [];
     } catch (e) {
       console.error('Error retrieving contact info:', e);
@@ -77,7 +79,7 @@ class ApiUtils {
     };
     try {
       const response = await postCall(this.endpoint + REV_USERS_CREATE, this.token, payload);
-      console.log(response);
+      console.log("createContact-", response);
       return response.data?.rev_user;
     } catch (e) {
       console.error('Error creating contact:', e);
@@ -108,8 +110,53 @@ class ApiUtils {
     };
 
     const response = await postCall(this.endpoint + CREATE_CUSTOM_OBJECT, this.token, enrichedPayload);
-    console.log(response);
+    console.log("createCustomObject-", response);
     return response.success ? response.data?.custom_object : null;
+  }
+
+  // Logic to match airmeetId from stringified tnt__other_info
+  async findEventCustomObjectByAirmeetId(airmeetId: string, leafTypeEvent: string): Promise<any> {
+    const payload = { leaf_type: leafTypeEvent };
+    const response = await postCall(this.endpoint + CUSTOM_OBJECT_LIST, this.token, payload);
+
+    if (!response.success || !response.data?.result) return null;
+
+    for (const obj of response.data.result) {
+      const otherInfoStr = obj.custom_fields?.tnt__other_info;
+      if (!otherInfoStr) continue;
+
+      try {
+        const otherInfo = JSON.parse(otherInfoStr);
+        console.log("findEventCustomObjectByAirmeetId-", otherInfo);
+        if (otherInfo.airmeetId === airmeetId) return obj;
+      } catch (e) {
+        console.warn('Error parsing tnt__other_info:', e);
+      }
+    }
+
+    return null;
+  }
+
+  // Method to create a link between two custom objects
+  async linkUserToEvent(customCreateLinkId: string, userObjId: string, eventObjId: string): Promise<void> {
+    const payload = {
+      custom_link_type: customCreateLinkId,
+      link_type: "custom_link",
+      source: userObjId,
+      target: eventObjId
+    };
+
+    try {
+      const response = await postCall(this.endpoint + CREATE_LINK, this.token, payload);
+      console.log("linkUserToEvent-", response);
+      if (!response.success) {
+        console.error('Link creation failed:', response.errMessage);
+      } else {
+        console.log('Link created successfully');
+      }
+    } catch (e) {
+      console.error('Error linking user to event:', e);
+    }
   }
 }
 
@@ -124,7 +171,7 @@ class AirmeetUtils {
 
     const parts = name.trim().split(/\s+/);
     if (parts.length === 1) return parts[0];
-    console.log(`${parts[0]} ${parts[parts.length - 1]}`);
+    console.log(`Name- ${parts[0]} ${parts[parts.length - 1]}`);
     return `${parts[0]} ${parts[parts.length - 1]}`;
   }
 
@@ -140,7 +187,9 @@ export const handleEvent = async (event: any) => {
   const apiUtil = new ApiUtils(endpoint, token);
   const inputs = event.input_data.global_values;
   const registrant = event.payload;
-  const leafType = (event.input_data.global_values.leaf_type || '').replace(/\s+/g, '_').trim().toLowerCase();
+  const leafType = (inputs.leaf_type_registration || '').replace(/\s+/g, '_').trim().toLowerCase();
+  const leafTypeEvent = (inputs.leaf_type_event_creation || '').replace(/\s+/g, '_').trim().toLowerCase();
+  const customCreateLinkId = (inputs.custom_create_link_id || '').trim();
 
   if (!registrant || !registrant.email) {
     return { success: false, error: 'Missing registrant data' };
@@ -148,10 +197,8 @@ export const handleEvent = async (event: any) => {
 
   const email = registrant.email;
   const name = AirmeetUtils.formatDisplayName(registrant.name);
-  console.log(name);
   const domain = AirmeetUtils.extractDomain(email);
   const shouldLinkAccounts = inputs['opt_in_account_linking'];
-
   const isGeneric = AirmeetUtils.isGenericDomain(domain);
 
   let accountId: string | undefined;
@@ -161,7 +208,7 @@ export const handleEvent = async (event: any) => {
   if (shouldLinkAccounts && !isGeneric) {
     console.log('Searching for existing accounts...');
     const existingAccounts = await apiUtil.getAccountInfo(domain);
-    console.log('Existing accounts:', existingAccounts);
+    console.log('Existing accounts-', existingAccounts);
 
     account = existingAccounts[0];
     accountId = account?.id;
@@ -171,7 +218,7 @@ export const handleEvent = async (event: any) => {
       accountId = account?.id;
     }
   }
-  console.log('Final accountId:', accountId);
+  console.log('Final accountId-', accountId);
 
   let contactId: string | undefined;
   let contact: any;
@@ -186,12 +233,19 @@ export const handleEvent = async (event: any) => {
     contact = existingContacts[0];
     contactId = contact.id;
   }
-  console.log('Final contactId:', contactId);
+  console.log('Final contactId-', contactId);
 
   // Create custom object if contact is successfully created
   if (contactId) {
     console.log('Creating new custom engagement...');
-    await apiUtil.createCustomObject(registrant, leafType, account, contact);
+    const userObj = await apiUtil.createCustomObject(registrant, leafType, account, contact);
+
+    if (userObj?.id && registrant.airmeetId) {
+      const eventObj = await apiUtil.findEventCustomObjectByAirmeetId(registrant.airmeetId, leafTypeEvent);
+      if (eventObj?.id) {
+        await apiUtil.linkUserToEvent(customCreateLinkId, userObj.id, eventObj.id);
+      }
+    }
   }
 
   return { success: true };
@@ -200,7 +254,7 @@ export const handleEvent = async (event: any) => {
 // Main function that processes all incoming events
 export const run = async (events: any[]) => {
   for (const event of events) {
-    console.log('event-', event);
+    console.log('Event-', event);
     await handleEvent(event);
   }
 };

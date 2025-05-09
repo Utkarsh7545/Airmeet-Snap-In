@@ -24,20 +24,20 @@ inputs:
         display_name: Enable Account Linking
         is_hidden: false
 
-    - name: leaf_type
-      description: Custom object type (leaf_type) to be created for each engagement (e.g., form, webinar, event)
+    - name: leaf_type_registration
+      description: Custom object type (leaf_type_registration) to be created for each engagement (e.g., form, webinar, event)
       field_type: text
       is_required: true
-      default_value: ""
+      default_value: "form"
       ui:
-        display_name: Leaf Type
+        display_name: Leaf Type Source
         is_hidden: false
 
     - name: field_event_name
       description: Field key in the custom schema to store the name of the Airmeet event
       field_type: text
       is_required: true
-      default_value: ""
+      default_value: "Event Name"
       ui:
         display_name: Event Name
         is_hidden: false
@@ -46,7 +46,7 @@ inputs:
       description: Field key in the custom schema to store the attendee registration date
       field_type: text
       is_required: true
-      default_value: ""
+      default_value: "Registration Date"
       ui:
         display_name: Registration Date
         is_hidden: false
@@ -55,7 +55,7 @@ inputs:
       description: Field key in the custom schema to associate the registrant's organization account
       field_type: text
       is_required: true
-      default_value: ""
+      default_value: "Account"
       ui:
         display_name: Account Field
         is_hidden: false
@@ -64,7 +64,7 @@ inputs:
       description: Field key in the custom schema to associate the individual contact
       field_type: text
       is_required: true
-      default_value: ""
+      default_value: "Contact"
       ui:
         display_name: Contact Field
         is_hidden: false
@@ -73,9 +73,27 @@ inputs:
       description: Field key to store raw Airmeet registrant metadata as a JSON string
       field_type: text
       is_required: true
-      default_value: ""
+      default_value: "Other Info"
       ui:
         display_name: Other Info (JSON)
+        is_hidden: false
+
+    - name: leaf_type_event_creation
+      description: Custom object type (leaf_type_event_creation) to be created for each engagement
+      field_type: text
+      is_required: true
+      default_value: "event"
+      ui:
+        display_name: Leaf Type Target
+        is_hidden: false
+
+    - name: custom_create_link_id
+      description: A unique identifier provided by the user to associate the registration
+      field_type: text
+      is_required: true
+      default_value: "don:core:dvrv-in-1:devo/2146wJjUyy:custom_link_type/1"
+      ui:
+        display_name: Custom Create Link ID
         is_hidden: false
 
 event_sources:
@@ -85,7 +103,7 @@ event_sources:
       display_name: Airmeet Registration Webhook
       type: flow-custom-webhook
       setup_instructions: |
-        ## How to Register a Webhook with Airmeet
+        ## How to Register a Webhook for User Registration on Airmeet
 
         Use the following details to register this webhook with Airmeet:
 
@@ -120,12 +138,53 @@ event_sources:
             event_key := "trigger.airmeet.attendee.added"
           }
 
+    - name: airmeet-event-created-source
+      description: Airmeet webhook trigger when an event is created
+      display_name: Airmeet Event Created Webhook
+      type: flow-custom-webhook
+      setup_instructions: |
+        ## How to Register a Webhook for Event Creation
+
+        Use the following details to register this webhook with Airmeet:
+
+        **API Endpoint**: `https://api-gateway.airmeet.com/platform-integration/v1/webhook-register`
+
+        **Method**: `POST`
+
+        **Headers**:
+        - `Content-Type: application/json`
+        - `Accept: application/json`
+        - `x-access-key: <your-access-key>`
+        - `x-secret-key: <your-secret-key>`
+
+        **Payload**:
+        ```json
+        {
+          "name": "DevRev Webhook for Event Created",
+          "description": "Sync event creation data to DevRev",
+          "triggerMetaInfoId": "trigger.airmeet.created",
+          "url": "{{source.trigger_url}}",
+          "platformName": "DevRev"
+        }
+        ```
+
+      config:
+        policy: |
+          package rego
+          output = {"event": event, "event_key": event_key} {
+            event := input.request.body
+            event_key := "trigger.airmeet.created"
+          }
+
 functions:
   - name: handle_airmeet_webhook
     description: Sync contact, link account, and create engagement object on registration webhook
 
   - name: validate_leaf_type
     description: Validates that the provided leaf_type exists in DevRev
+
+  - name: handle_airmeet_event_created
+    description: Handle event when a new Airmeet event is created
 
 automations:
   - name: Airmeet Registration Handler
@@ -134,6 +193,13 @@ automations:
     event_types:
       - custom:trigger.airmeet.attendee.added
     function: handle_airmeet_webhook
+
+  - name: Airmeet Event Created Handler
+    description: Triggered when a new Airmeet event is created
+    source: airmeet-event-created-source
+    event_types:
+      - custom:trigger.airmeet.created
+    function: handle_airmeet_event_created
 
 hooks:
   - type: validate

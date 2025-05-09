@@ -44,26 +44,3 @@ export async function postCall(
 //     return { success: false, errMessage: error.response?.data || error.message };
 //   }
 // }
-
-// export async function fetchAirmeetAccessToken(
-//   accessKey: string,
-//   secretKey: string
-// ): Promise<string | null> {
-//   try {
-//     const res = await axios.post(
-//       'https://api-gateway.airmeet.com/prod/auth',
-//       {},
-//       {
-//         headers: {
-//           'X-Airmeet-Access-Key': accessKey,
-//           'X-Airmeet-Secret-Key': secretKey,
-//         },
-//       }
-//     );
-
-//     return res.data?.data?.token || null;
-//   } catch (err: any) {
-//     console.error('Failed to fetch Airmeet Access Token:', err.response?.data || err.message);
-//     return null;
-//   }
-// }
